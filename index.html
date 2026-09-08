@@ -336,6 +336,7 @@ Released under the MIT license: http://jsbin.mit-license.org
         document.getElementById('rtk_time').textContent = "--";
         document.getElementById('rtk_uptime').textContent = "--";
         document.getElementById('rtk_tempC').textContent = "--";
+        document.getElementById('rtk_log').textContent = "";
         const mapLinkElem = document.getElementById('rtk_map_link');
         if (mapLinkElem) {
             mapLinkElem.removeAttribute('href');
@@ -644,36 +645,62 @@ function sendConfig() {
         }
     }
     
-// 1. 將 NMEA 原始座標轉成十進位度數 (DD.DDDDDD)
+    // 1. 將 NMEA 原始座標轉成十進位度數 (DD.DDDDDD)
     function nmeaToDD(rawValue) {
-        if (!rawValue || isNaN(rawValue)) return 0;
+        if (!rawValue) return 0;
         
-        // NMEA 格式為 DDMM.MMMM，所以除以 100 取整數就是「度」
-        const degrees = Math.floor(rawValue / 100);
-        // 扣掉度，剩下的就是「分」
-        const minutes = rawValue - (degrees * 100);
+        const str = rawValue.toString().trim();
+        const dotIndex = str.indexOf('.');
         
-        // 分除以 60 換算成度，加起來
-        return degrees + (minutes / 60);
+        // NMEA 小數點前固定保留 2 位給「分」(MM)
+        // 緯度是 DDMM.mmmm (小數點前 4 碼)
+        // 經度是 DDDMM.mmmm (小數點前 5 碼)
+        const splitIndex = (dotIndex !== -1 ? dotIndex : str.length) - 2;
+        
+        const degrees = parseFloat(str.slice(0, splitIndex));
+        const minutes = parseFloat(str.slice(splitIndex));
+        
+        const dd = degrees + (minutes / 60);
+        return Number(dd.toFixed(8)); // 轉回數字並保留 8 位
     }
+
     
     // 2. 將 NMEA 原始座標轉成度分秒字串 (D°M'S")
     function nmeaToDMS(rawValue) {
-        if (!rawValue || isNaN(rawValue)) return "";
+        if (!rawValue) return "";
     
-        const d = Math.floor(rawValue / 100);
-        const rawMinutes = rawValue - (d * 100);
-        const m = Math.floor(rawMinutes);
+        const str = rawValue.toString().trim();
+        const dotIndex = str.indexOf('.');
+        if (dotIndex === -1 && isNaN(str)) return "";
+    
+        // 小數點前倒數 2 位為「分」的分界點
+        const splitIndex = (dotIndex !== -1 ? dotIndex : str.length) - 2;
+        if (splitIndex <= 0) return "";
+    
+        let d = parseInt(str.slice(0, splitIndex), 10);
+        const rawMinutes = parseFloat(str.slice(splitIndex));
         
-        // 算秒數，並用 .toFixed(4) 限制小數點後 4 位（對齊你 C++ 的 %.4f）
-        const s = ((rawMinutes - m) * 60).toFixed(4);
-        
-        // 使用 padStart 幫分鐘補零（例如 5 分變成 05 分）
+        let m = Math.floor(rawMinutes);
+        let sNum = (rawMinutes - m) * 60;
+    
+        // 四捨五入到小數點後 4 位
+        let s = Number(sNum.toFixed(4));
+    
+        // 處理 60 秒進位保護
+        if (s >= 60) {
+            s = 0;
+            m += 1;
+            if (m >= 60) {
+                m = 0;
+                d += 1;
+            }
+        }
+    
         const mStr = String(m).padStart(2, '0');
+        const sStr = s.toFixed(4).padStart(7, '0'); // 秒數補前導零，如 05.1234
     
-        // 網頁端可以直接打出 ° 這個符號，不需要寫 \xC2\xB0 了！
-        return `${d}°${mStr}'${s}"`;
-    }      
+        return `${d}°${mStr}'${sStr}"`;
+    }     
 
 </script>
 </body>
