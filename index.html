@@ -349,10 +349,45 @@ Released under the MIT license: http://jsbin.mit-license.org
     client.on('message', (topic, message) => {
         const msgString = message.toString();
         
-        if (topic === reportTopic1) {
-            try {
-                // 將收到的純文字嘗試解析為 JSON 物件
-                const data = JSON.parse(msgString);
+    if (topic === reportTopic1) {
+                try {
+                    let data = {};
+
+                // ═══════════════ 資料來源解析與統一適配 ═══════════════
+                if (msgString.startsWith("{")) {
+                    // 1. 舊版相容：直接解析 JSON
+                    data = JSON.parse(msgString);
+                } else {
+                    // 2. 新版相容：解析 NMEA 串流並映射為相同鍵名
+                    const lines = msgString.split(/\r?\n/);
+                    for (const line of lines) {
+                        if (line.startsWith("$GNGGA") \vert{}\vert{} line.startsWith("$GPGGA")) {
+                            const parts = line.split(',');
+                            
+                            // NMEA GGA 欄位映射對齊：
+                            // parts[1]: UTC (hhmmss.ss) -> 取前 6 碼
+                            // parts[2]: RawLat (ddmm.mmmm)
+                            // parts[4]: RawLon (dddmm.mmmm)
+                            // parts[6]: FixType ('0','1','4','5'...)
+                            // parts[7]: Sats
+                            // parts[9]: Alt (海拔正高)
+                            // parts[11]: Geo (大地水準面差距)
+                            if (parts[1]) data.UTC = parts[1].substring(0, 6);
+                            if (parts[2]) data.RawLat = parts[2];
+                            if (parts[4]) data.RawLon = parts[4];
+                            if (parts[6]) data.FixType = parts[6];
+                            if (parts[7]) data.Sats = parts[7];
+                            if (parts[9] && parts[9] !== "") data.Alt = parts[9];
+                            if (parts[11] && parts[11] !== "") data.Geo = parts[11];
+
+                            // 若有 Alt 與 Geo，自動推算 Ellipsoid (橢球高 = 海拔高 + 大地水準面高)
+                            if (data.Alt !== undefined && data.Geo !== undefined) {
+                                data.Ellipsoid = (parseFloat(data.Alt) + parseFloat(data.Geo)).toFixed(3);
+                            }
+                            break; // 找到當秒 GGA 即可跳出
+                        }
+                    }
+                }
 
 
                 
@@ -367,18 +402,27 @@ Released under the MIT license: http://jsbin.mit-license.org
                     else if (workmode === "base") btn_base.classList.add("selected");
                 }
 
+                // 1. 解算狀態判定
                 if (data.FixType && data.FixType !== "") {
-                    // 1. 強制把資料轉成字串，防範數字型態，並統一轉大寫防範大小寫問題
+                    // 強制轉成字串防範型態，並統一轉大寫
                     const fixStr = String(data.FixType).toUpperCase();
                     const solElement = document.getElementById('rtk_sol');
                     
-                    solElement.textContent = data.FixType; // 換成你最喜歡的 textContent
+                    // 轉為易讀狀態文字
+                    let displayText = data.FixType;
+                    if (fixStr === "4") displayText = "RTK FIX";
+                    else if (fixStr === "5") displayText = "RTK FLOAT";
+                    else if (fixStr === "1") displayText = "SINGLE";
+                    else if (fixStr === "2") displayText = "DGPS";
+                    else if (fixStr === "0") displayText = "INVALID";
+
+                    solElement.textContent = displayText;
                 
-                    // 根據解算狀態動態變更顏色 (FIX 變綠色，FLOAT/其他變藍色，新增不定位 INVALID 變紅色)
-                    if (fixStr.includes("FIX") || fixStr.includes("4")) {
+                    // 根據解算狀態動態變更顏色
+                    if (fixStr.includes("FIX") || fixStr === "4") {
                         solElement.style.color = "green";   // RTK 定位成功
-                    } else if (fixStr.includes("FLOAT") || fixStr.includes("5") || fixStr.includes("2")) {
-                        solElement.style.color = "blue";    // 浮點解
+                    } else if (fixStr.includes("FLOAT") || fixStr === "5" || fixStr === "2") {
+                        solElement.style.color = "blue";    // 浮點解 / 差分解
                     } else {
                         solElement.style.color = "red";     // 未定位或無效解
                     }
@@ -386,19 +430,12 @@ Released under the MIT license: http://jsbin.mit-license.org
                     solElement.textContent = "--";
                     solElement.style.color = "red";
                 }
-                
-                // 2. 填入十進位經緯度 (改用 textContent)
-                /*if (data.LatDeg && data.LatDMS) {
-                    document.getElementById('rtk_lat').textContent = `${data.LatDeg} / ${data.LatDMS}`;
-                }
-                if (data.LonDeg && data.LonDMS) {
-                    document.getElementById('rtk_lon').textContent = `${data.LonDeg} / ${data.LonDMS}`;
-                }*/
-                
+
+                // 2. 經緯度換算與填入
                 if (data.RawLat) {
                     latDD = nmeaToDD(data.RawLat).toFixed(8); 
                     latDMS = nmeaToDMS(data.RawLat);
-                    document.getElementById('rtk_lat').textContent = latDD + " / " + latDMS;              
+                    document.getElementById('rtk_lat').textContent = latDD + " / " + latDMS;               
                 } else {
                     document.getElementById('rtk_lat').textContent = "--";
                 }
@@ -406,7 +443,7 @@ Released under the MIT license: http://jsbin.mit-license.org
                 if (data.RawLon) {
                     lonDD = nmeaToDD(data.RawLon).toFixed(8); 
                     lonDMS = nmeaToDMS(data.RawLon);
-                    document.getElementById('rtk_lon').textContent = lonDD + " / " + lonDMS;              
+                    document.getElementById('rtk_lon').textContent = lonDD + " / " + lonDMS;               
                 } else {
                     document.getElementById('rtk_lon').textContent = "--";
                 }
@@ -424,30 +461,29 @@ Released under the MIT license: http://jsbin.mit-license.org
                         mapLinkElem.style.opacity = "0.5";
                     }
                 }          
-                          
-                // 3. 【高能注意】海拔高度可能是 0 米！用簡寫會失效，所以必須用這種寫法來防呆：
+                                          
+                // 3. 高度資訊處理 (橢球高 / 海拔高 / 大地水準面高)
                 if (data.Ellipsoid !== undefined && data.Ellipsoid !== null) {
-                //if (data.Ellipsoid && data.Ellipsoid !== "") {
                     document.getElementById('rtk_ell').textContent = data.Ellipsoid + " m";
                     ellipsoid = data.Ellipsoid;
                 } else {
                     document.getElementById('rtk_ell').textContent = "--";
                 } 
-                //if (data.Alt !== undefined && data.Alt !== null) {
+
                 if (data.Alt && data.Alt !== "") {
                     document.getElementById('rtk_alt').textContent = data.Alt + " m";
                 } else {
                     document.getElementById('rtk_alt').textContent = "--";
                 } 
-                //if (data.Geo !== undefined && data.Geo !== null) {
+
                 if (data.Geo && data.Geo !== "") {
                     document.getElementById('rtk_geo').textContent = data.Geo + " m";
-                    geoid = data.Geo; // 順便幫你把複製錯誤的註解修正了
+                    geoid = data.Geo;
                 } else {
                     document.getElementById('rtk_geo').textContent = "--";
                 } 
                 
-                // 4. 填入 UTC 時間
+                // 4. 填入 UTC 時間並轉換為台灣時間 (UTC + 8)
                 if (data.UTC) {
                     const utcStr = String(data.UTC).trim();
                     
@@ -467,43 +503,14 @@ Released under the MIT license: http://jsbin.mit-license.org
                     } else {
                         document.getElementById('rtk_time').textContent = utcStr;
                     }
-                }               
-                //5. ESP運行時間
-                if (data.Uptime !== undefined && data.Uptime !== null) {
-                    const totalSeconds = Math.floor(data.Uptime);
-                    
-                    // 拆出天、時、分、秒
-                    const days = Math.floor(totalSeconds / 86400); // 1天 = 86400秒
-                    const hours = Math.floor((totalSeconds % 86400) / 3600);
-                    const minutes = Math.floor((totalSeconds % 3600) / 60);
-                    const seconds = totalSeconds % 60;
-                
-                    const h = String(hours).padStart(2, '0');
-                    const m = String(minutes).padStart(2, '0');
-                    const s = String(seconds).padStart(2, '0');
-                
-                    // 如果滿 1 天以上才顯示天數，否則只顯示時間
-                    if (days > 0) {
-                        document.getElementById('rtk_uptime').textContent = `${days}d ${h}:${m}:${s}`;
-                    } else {
-                        document.getElementById('rtk_uptime').textContent = `${h}:${m}:${s}`;
-                    }
                 }
-                //6. LM35D溫度
-                if (data.TempC !== null) {
-                    //document.getElementById('rtk_tempC').textContent = data.TempC
-                  document.getElementById('rtk_tempC').textContent = Number(data.TempC).toFixed(0);
 
-                }                 
-                
             } catch (e) {
-                console.warn("非JSON數據，已自動忽略。");
+                console.error("reportTopic1 解析異常:", e, msgString);
             }
-
-                       
         }
       
-else if (topic === reportTopic2) {
+        else if (topic === reportTopic2) {
             try {
                 // 將收到的純文字嘗試解析為 JSON 物件
                 const data = JSON.parse(msgString); 
