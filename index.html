@@ -394,32 +394,32 @@ Released under the MIT license: http://jsbin.mit-license.org
                 }
 
                 if (data.FixType && data.FixType !== "") {
-                    // 1. 強制把資料轉成字串，防範數字型態，並統一轉大寫防範大小寫問題
+                    // 強制轉成字串防範型態，並統一轉大寫
                     const fixStr = String(data.FixType).toUpperCase();
                     const solElement = document.getElementById('rtk_sol');
                     
-                    solElement.textContent = data.FixType; // 換成你最喜歡的 textContent
+                    // 轉為易讀狀態文字
+                    let displayText = data.FixType;
+                    if (fixStr === "4") displayText = "RTK FIX";
+                    else if (fixStr === "5") displayText = "RTK FLOAT";
+                    else if (fixStr === "1") displayText = "SINGLE";
+                    else if (fixStr === "2") displayText = "DGPS";
+                    else if (fixStr === "0") displayText = "INVALID";
+
+                    solElement.textContent = displayText;
                 
-                    // 根據解算狀態動態變更顏色 (FIX 變綠色，FLOAT/其他變藍色，新增不定位 INVALID 變紅色)
-                    if (fixStr.includes("FIX") || fixStr.includes("4")) {
+                    // 根據解算狀態動態變更顏色
+                    if (fixStr.includes("FIX") || fixStr === "4") {
                         solElement.style.color = "green";   // RTK 定位成功
-                    } else if (fixStr.includes("FLOAT") || fixStr.includes("5") || fixStr.includes("2")) {
-                        solElement.style.color = "blue";    // 浮點解
+                    } else if (fixStr.includes("FLOAT") || fixStr === "5" || fixStr === "2") {
+                        solElement.style.color = "blue";    // 浮點解 / 差分解
                     } else {
                         solElement.style.color = "red";     // 未定位或無效解
                     }
                 } else {
                     solElement.textContent = "--";
                     solElement.style.color = "red";
-                }
-                
-                // 2. 填入十進位經緯度 (改用 textContent)
-                /*if (data.LatDeg && data.LatDMS) {
-                    document.getElementById('rtk_lat').textContent = `${data.LatDeg} / ${data.LatDMS}`;
-                }
-                if (data.LonDeg && data.LonDMS) {
-                    document.getElementById('rtk_lon').textContent = `${data.LonDeg} / ${data.LonDMS}`;
-                }*/
+                }            
                 
                 if (data.RawLat) {
                     latDD = nmeaToDD(data.RawLat).toFixed(8); 
@@ -517,7 +517,7 @@ Released under the MIT license: http://jsbin.mit-license.org
                 }
                 //6. LM35D溫度
                 // 兼容舊版 JSON 內的溫度（若為新版 NMEA 或未帶 TempC 則安全略過）
-                if (data.TempC !== undefined && data.TempC !== null && data.TempC !== "") {
+                if (data.TempC !== undefined && data.TempC !== null) {
                     const tempVal = Number(data.TempC);
                     if (!isNaN(tempVal)) {
                         document.getElementById('rtk_tempC').textContent = tempVal.toFixed(0);
@@ -579,7 +579,7 @@ else if (topic === reportTopic2) {
 
                 // ---------- 5. LM35D 溫度 (TempC) ----------
                 // 兼容舊版 JSON 內的溫度（若為新版 NMEA 或未帶 TempC 則安全略過）
-                if (data.TempC !== undefined && data.TempC !== null && data.TempC !== "") {
+                if (data.TempC !== undefined && data.TempC !== null) {
                     const tempVal = Number(data.TempC);
                     if (!isNaN(tempVal)) {
                         document.getElementById('rtk_tempC').textContent = tempVal.toFixed(0);
