@@ -400,11 +400,12 @@ Released under the MIT license: http://jsbin.mit-license.org
                     
                     // 轉為易讀狀態文字
                     let displayText = data.FixType;
-                    if (fixStr === "4") displayText = "RTK FIX";
-                    else if (fixStr === "5") displayText = "RTK FLOAT";
-                    else if (fixStr === "1") displayText = "SINGLE";
-                    else if (fixStr === "2") displayText = "DGPS";
-                    else if (fixStr === "0") displayText = "INVALID";
+                    if (fixStr === "4") displayText = "RTK FIX (4)";
+                    else if (fixStr === "5") displayText = "RTK FLOAT (5)";
+                    else if (fixStr === "1") displayText = "SINGLE (1)";
+                    else if (fixStr === "2") displayText = "DGPS (2)";
+                    else if (fixStr === "0") displayText = "INVALID (0)";
+                    else if (fixStr === "7") displayText = "Manual (7)";
 
                     solElement.textContent = displayText;
                 
