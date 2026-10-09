@@ -348,8 +348,154 @@ Released under the MIT license: http://jsbin.mit-license.org
     
     client.on('message', (topic, message) => {
         const msgString = message.toString();
-        
-if (topic === reportTopic2) {
+if (topic === reportTopic1) {
+        try {
+            let data = {};
+            let latDD = 0;
+            let lonDD = 0;
+            let latDMS = "";
+
+            // ═══════════════ 資料來源解析與統一適配 ═══════════════
+            if (msgString.startsWith("{")) {
+                // 1. 舊版相容：直接解析 JSON
+                data = JSON.parse(msgString);
+            } else {
+                // 2. 新版相容：解析 NMEA 串流並映射為相同鍵名
+                const lines = msgString.split(/\r?\n/);
+                for (const line of lines) {
+                    // ★ 修正此處的 || 邏輯運算子
+                    if (line.startsWith("$GNGGA") \vert{}\vert{} line.startsWith("$GPGGA")) {
+                        const parts = line.split(',');
+                        
+                        // NMEA GGA 欄位映射對齊
+                        if (parts[1]) data.UTC = parts[1].substring(0, 6);
+                        if (parts[2]) data.RawLat = parts[2];
+                        if (parts[4]) data.RawLon = parts[4];
+                        if (parts[6]) data.FixType = parts[6];
+                        if (parts[7]) data.Sats = parts[7];
+                        if (parts[9] && parts[9] !== "") data.Alt = parts[9];
+                        if (parts[11] && parts[11] !== "") data.Geo = parts[11];
+
+                        // 自動推算橢球高 (Alt + Geo)
+                        if (data.Alt !== undefined && data.Geo !== undefined) {
+                            data.Ellipsoid = (parseFloat(data.Alt) + parseFloat(data.Geo)).toFixed(3);
+                        }
+                        break; // 找到當秒 GGA 即可跳出
+                    }
+                }
+            }
+
+            // 1. 工作模式切換（若 reportTopic1 有帶 Status 才更新）
+            if (data.Status) {
+                workmode = data.Status;
+                btn_idle.classList.remove("selected");
+                btn_rover.classList.remove("selected");
+                btn_base.classList.remove("selected");
+                if (workmode === "idle") btn_idle.classList.add("selected");
+                else if (workmode === "rover") btn_rover.classList.add("selected");
+                else if (workmode === "base") btn_base.classList.add("selected");
+            }
+
+            // 2. 解算狀態判定
+            const solElement = document.getElementById('rtk_sol');
+            if (data.FixType && data.FixType !== "") {
+                const fixStr = String(data.FixType).toUpperCase();
+                
+                let displayText = data.FixType;
+                if (fixStr === "4") displayText = "RTK FIX";
+                else if (fixStr === "5") displayText = "RTK FLOAT";
+                else if (fixStr === "1") displayText = "SINGLE";
+                else if (fixStr === "2") displayText = "DGPS";
+                else if (fixStr === "0") displayText = "INVALID";
+
+                solElement.textContent = displayText;
+
+                if (fixStr.includes("FIX") || fixStr === "4") {
+                    solElement.style.color = "green";
+                } else if (fixStr.includes("FLOAT") || fixStr === "5" || fixStr === "2") {
+                    solElement.style.color = "blue";
+                } else {
+                    solElement.style.color = "red";
+                }
+            } else {
+                solElement.textContent = "--";
+                solElement.style.color = "red";
+            }
+
+            // 3. 經緯度換算與填入
+            if (data.RawLat) {
+                latDD = parseFloat(nmeaToDD(data.RawLat).toFixed(8)); 
+                latDMS = nmeaToDMS(data.RawLat);
+                document.getElementById('rtk_lat').textContent = latDD + " / " + latDMS;               
+            } else {
+                document.getElementById('rtk_lat').textContent = "--";
+            }
+            
+            if (data.RawLon) {
+                lonDD = parseFloat(nmeaToDD(data.RawLon).toFixed(8)); 
+                lonDMS = nmeaToDMS(data.RawLon);
+                document.getElementById('rtk_lon').textContent = lonDD + " / " + lonDMS;               
+            } else {
+                document.getElementById('rtk_lon').textContent = "--";
+            }
+
+            // ═══════════════ 更新 Google Maps 連結 ═══════════════
+            const mapLinkElem = document.getElementById('rtk_map_link');
+            if (mapLinkElem) {
+                if (data.RawLat && data.RawLon && latDD > 0 && lonDD > 0) {
+                    mapLinkElem.href = `https://www.google.com/maps/search/?api=1&query=${latDD},${lonDD}`;
+                    mapLinkElem.style.pointerEvents = "auto";
+                    mapLinkElem.style.opacity = "1";
+                } else {
+                    mapLinkElem.removeAttribute('href');
+                    mapLinkElem.style.pointerEvents = "none";
+                    mapLinkElem.style.opacity = "0.5";
+                }
+            }          
+                                      
+            // 4. 高度資訊處理
+            if (data.Ellipsoid !== undefined && data.Ellipsoid !== null) {
+                document.getElementById('rtk_ell').textContent = data.Ellipsoid + " m";
+                ellipsoid = data.Ellipsoid;
+            } else {
+                document.getElementById('rtk_ell').textContent = "--";
+            } 
+
+            if (data.Alt && data.Alt !== "") {
+                document.getElementById('rtk_alt').textContent = data.Alt + " m";
+            } else {
+                document.getElementById('rtk_alt').textContent = "--";
+            } 
+
+            if (data.Geo && data.Geo !== "") {
+                document.getElementById('rtk_geo').textContent = data.Geo + " m";
+                geoid = data.Geo;
+            } else {
+                document.getElementById('rtk_geo').textContent = "--";
+            } 
+            
+            // 5. 填入 UTC 時間並轉台灣時間 (UTC+8)
+            if (data.UTC) {
+                const utcStr = String(data.UTC).trim();
+                
+                if (utcStr.length === 6) {
+                    let hh = parseInt(utcStr.substring(0, 2), 10);
+                    const mm = utcStr.substring(2, 4);
+                    const ss = utcStr.substring(4, 6);
+                    
+                    hh = (hh + 8) % 24;
+                    const twHH = String(hh).padStart(2, '0');
+                    document.getElementById('rtk_time').textContent = `${twHH}:${mm}:${ss}`;
+                } else {
+                    document.getElementById('rtk_time').textContent = utcStr;
+                }
+            }
+
+        } catch (e) {
+            console.error("reportTopic1 解析異常:", e, msgString);
+        }
+    }        
+else if (topic === reportTopic2) {
             try {
                 // 將收到的純文字嘗試解析為 JSON 物件
                 const data = JSON.parse(msgString); 
