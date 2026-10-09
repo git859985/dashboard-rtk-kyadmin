@@ -516,11 +516,13 @@ Released under the MIT license: http://jsbin.mit-license.org
                     }
                 }
                 //6. LM35D溫度
-                if (data.TempC !== null) {
-                    //document.getElementById('rtk_tempC').textContent = data.TempC
-                  document.getElementById('rtk_tempC').textContent = Number(data.TempC).toFixed(0);
-
-                }                 
+                // 兼容舊版 JSON 內的溫度（若為新版 NMEA 或未帶 TempC 則安全略過）
+                if (data.TempC !== undefined && data.TempC !== null && data.TempC !== "") {
+                    const tempVal = Number(data.TempC);
+                    if (!isNaN(tempVal)) {
+                        document.getElementById('rtk_tempC').textContent = tempVal.toFixed(0);
+                    }
+                }          
                 
             } catch (e) {
                 console.warn("非JSON數據，已自動忽略。");
@@ -576,8 +578,12 @@ else if (topic === reportTopic2) {
                 }
 
                 // ---------- 5. LM35D 溫度 (TempC) ----------
-                if (data.TempC !== undefined && data.TempC !== null) {
-                    document.getElementById('rtk_tempC').textContent = Number(data.TempC).toFixed(0);
+                // 兼容舊版 JSON 內的溫度（若為新版 NMEA 或未帶 TempC 則安全略過）
+                if (data.TempC !== undefined && data.TempC !== null && data.TempC !== "") {
+                    const tempVal = Number(data.TempC);
+                    if (!isNaN(tempVal)) {
+                        document.getElementById('rtk_tempC').textContent = tempVal.toFixed(0);
+                    }
                 }
 
             } catch (e) {
