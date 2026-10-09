@@ -348,10 +348,45 @@ Released under the MIT license: http://jsbin.mit-license.org
     
     client.on('message', (topic, message) => {
         const msgString = message.toString();
-        if (topic === reportTopic1) {
+if (topic === reportTopic1) {
             try {
-                // 將收到的純文字嘗試解析為 JSON 物件
-                const data = JSON.parse(msgString);
+                let data = {};
+
+                // ═══════════════ 資料來源解析與統一適配 ═══════════════
+                if (msgString.startsWith("{")) {
+                    // 1. 舊版相容：直接解析 JSON
+                    data = JSON.parse(msgString);
+                } else {
+                    // 2. 新版相容：解析 NMEA 串流並映射為相同鍵名
+                    const lines = msgString.split(/\r?\n/);
+                    for (const line of lines) {
+                        if (line.startsWith("$GNGGA") \vert{}\vert{} line.startsWith("$GPGGA")) {
+                            const parts = line.split(',');
+                            
+                            // NMEA GGA 欄位映射對齊：
+                            // parts[1]: UTC (hhmmss.ss) -> 取前 6 碼
+                            // parts[2]: RawLat (ddmm.mmmm)
+                            // parts[4]: RawLon (dddmm.mmmm)
+                            // parts[6]: FixType ('0','1','4','5'...)
+                            // parts[7]: Sats
+                            // parts[9]: Alt (海拔正高)
+                            // parts[11]: Geo (大地水準面差距)
+                            if (parts[1]) data.UTC = parts[1].substring(0, 6);
+                            if (parts[2]) data.RawLat = parts[2];
+                            if (parts[4]) data.RawLon = parts[4];
+                            if (parts[6]) data.FixType = parts[6];
+                            if (parts[7]) data.Sats = parts[7];
+                            if (parts[9] && parts[9] !== "") data.Alt = parts[9];
+                            if (parts[11] && parts[11] !== "") data.Geo = parts[11];
+
+                            // 若有 Alt 與 Geo，自動推算 Ellipsoid (橢球高 = 海拔高 + 大地水準面高)
+                            if (data.Alt !== undefined && data.Geo !== undefined) {
+                                data.Ellipsoid = (parseFloat(data.Alt) + parseFloat(data.Geo)).toFixed(3);
+                            }
+                            break; // 找到當秒 GGA 即可跳出
+                        }
+                    }
+                }
 
 
                 
