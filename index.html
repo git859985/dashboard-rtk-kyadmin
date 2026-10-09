@@ -503,26 +503,66 @@ Released under the MIT license: http://jsbin.mit-license.org
                        
         }
       
-        else if (topic === reportTopic2) {
+else if (topic === reportTopic2) {
             try {
                 // 將收到的純文字嘗試解析為 JSON 物件
                 const data = JSON.parse(msgString); 
-                // 全部統一用簡寫，既乾淨又好讀
+
+                // ---------- 1. 保留原本的 NTRIP 參數設定 ----------
                 if (data.host)       document.getElementById('ntrip_ip').value = data.host;
                 if (data.port)       document.getElementById('ntrip_port').value = data.port;
                 if (data.mount)      document.getElementById('ntrip_mount').value = data.mount;
                 if (data.user)       document.getElementById('ntrip_user').value = data.user;
                 if (data.pw)         document.getElementById('ntrip_pass').value = data.pw;
                 if (data.base_mount) document.getElementById('base_mount').value = data.base_mount;                
+
+                // ---------- 2. 設備工作模式 (Status) ----------
+                if (data.Status) {
+                    workmode = data.Status;
+                    // 直接用 id 移除選中樣式
+                    btn_idle.classList.remove("selected");
+                    btn_rover.classList.remove("selected");
+                    btn_base.classList.remove("selected");
+                    if (workmode === "idle") btn_idle.classList.add("selected");
+                    else if (workmode === "rover") btn_rover.classList.add("selected");
+                    else if (workmode === "base") btn_base.classList.add("selected");
+                }           
+
+                // ---------- 4. ESP 運行時間 (Uptime) ----------
+                if (data.Uptime !== undefined && data.Uptime !== null) {
+                    const totalSeconds = Math.floor(data.Uptime);
+                    
+                    // 拆出天、時、分、秒
+                    const days = Math.floor(totalSeconds / 86400); // 1天 = 86400秒
+                    const hours = Math.floor((totalSeconds % 86400) / 3600);
+                    const minutes = Math.floor((totalSeconds % 3600) / 60);
+                    const seconds = totalSeconds % 60;
+                
+                    const h = String(hours).padStart(2, '0');
+                    const m = String(minutes).padStart(2, '0');
+                    const s = String(seconds).padStart(2, '0');
+                
+                    // 滿 1 天以上顯示天數，否則只顯示時:分:秒
+                    if (days > 0) {
+                        document.getElementById('rtk_uptime').textContent = `${days}d ${h}:${m}:${s}`;
+                    } else {
+                        document.getElementById('rtk_uptime').textContent = `${h}:${m}:${s}`;
+                    }
+                }
+
+                // ---------- 5. LM35D 溫度 (TempC) ----------
+                if (data.TempC !== undefined && data.TempC !== null) {
+                    document.getElementById('rtk_tempC').textContent = Number(data.TempC).toFixed(0);
+                }
+
             } catch (e) {
-                //console.warn("非JSON數據，已自動忽略。");
                 // 若非 JSON，將原始文字顯示在 rtk_log 中
                 const logElem = document.getElementById('rtk_log');
                 if (logElem) {
                     logElem.textContent = msgString;
                 }
             }
-        }      
+        }     
     });
  
     function send_idle() {
